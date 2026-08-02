@@ -1,0 +1,22 @@
+{
+  "short_name": "Turnly",
+  "name": "Turnly Virtual Queue Engine",
+  "description": "Multi-tenant virtual queue management engine",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8f7f4",
+  "theme_color": "#111111",
+  "display": "standalone",
+  "orientation": "portrait"
+}

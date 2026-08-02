@@ -1,0 +1,17 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow public read on queues & tokens for live customer status tracking
+    match /queues/{queueId} {
+      allow read: if true;
+      allow write: if request.auth != null || resource == null;
+
+      match /tokens/{tokenId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if true;
+      }
+    }
+  }
+}
