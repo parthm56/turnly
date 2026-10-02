@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
 import { cancelToken, clearTicketId, getPosition, saveFcmToken } from '@/lib/queueStore';
-import { requestFcmToken } from '@/lib/pushNotifications';
+import { requestFcmToken, requestNotificationPermission } from '@/lib/pushNotifications';
 import AdBanner from '@/components/AdBanner';
 import Link from 'next/link';
 
@@ -39,14 +39,36 @@ export default function TicketPage({ params }) {
   const [fcmRegistered, setFcmRegistered] = useState(false);
 
   useEffect(() => {
-    if ('Notification' in window) setNotifPerm(Notification.permission);
+    if (typeof window !== 'undefined') {
+      if (!('Notification' in window)) {
+        setNotifPerm('unsupported');
+      } else {
+        setNotifPerm(Notification.permission);
+      }
+    }
   }, []);
   const notifBlocked = notifPerm !== 'granted';
+
+  const handleEnableNotifications = async () => {
+    try {
+      const p = await requestNotificationPermission();
+      setNotifPerm(p);
+      if (p === 'granted') {
+        const token = await requestFcmToken();
+        if (token) {
+          await saveFcmToken(slug, ticketId, token);
+          setFcmRegistered(true);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Obtain & save FCM Push Token to Firebase Realtime DB for this user's device
   useEffect(() => {
     if (!slug || !ticketId || fcmRegistered) return;
-    if ('Notification' in window && Notification.permission === 'granted') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       requestFcmToken().then((token) => {
         if (token) {
           saveFcmToken(slug, ticketId, token);
@@ -282,16 +304,23 @@ export default function TicketPage({ params }) {
             <span style={{ fontSize: 20, lineHeight: 1 }}>🔔</span>
             <div style={{ flex: 1 }}>
               <p style={{ fontWeight: 700, fontSize: 13, color: '#92400e', margin: '0 0 4px' }}>
-                Notifications are {notifPerm === 'denied' ? 'Blocked' : 'Not Enabled'}
+                {notifPerm === 'denied'
+                  ? 'Notifications Blocked'
+                  : notifPerm === 'unsupported'
+                  ? 'Push Notifications Unsupported'
+                  : 'Notifications are Not Enabled'}
               </p>
               <p style={{ fontSize: 12, color: '#92400e', margin: '0 0 10px', lineHeight: 1.5 }}>
                 {notifPerm === 'denied'
-                  ? 'You blocked notifications. Open your browser settings → site settings → allow notifications for this site.'
+                  ? 'You blocked notifications. Open your browser settings → site settings to allow notifications for this site.'
+                  : notifPerm === 'unsupported'
+                  ? 'Your browser does not support Web Push notifications (on iOS, tap Share → Add to Home Screen). Keep this tab open for sound & live status updates.'
                   : "You won't get an alert when it's your turn. Enable notifications so we can ping you."}
               </p>
-              {notifPerm !== 'denied' && (
+              {notifPerm === 'default' && (
                 <button
-                  onClick={() => Notification.requestPermission().then(p => { setNotifPerm(p); })}
+                  type="button"
+                  onClick={handleEnableNotifications}
                   style={{ fontSize: 12, fontWeight: 700, background: '#b45309', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
                   Enable Notifications
                 </button>

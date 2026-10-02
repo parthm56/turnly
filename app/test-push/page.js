@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { requestNotificationPermission } from '@/lib/pushNotifications';
 
 export default function TestPushPage() {
   const [token, setToken] = useState('');
@@ -31,7 +32,7 @@ export default function TestPushPage() {
   const getToken = async () => {
     setStatus('Getting FCM token...');
     addLog('Requesting notification permission...');
-    const perm = await Notification.requestPermission();
+    const perm = await requestNotificationPermission();
     addLog(`Permission: ${perm}`);
     if (perm !== 'granted') { addLog('❌ Permission denied'); return; }
 

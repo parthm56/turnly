@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
 import { getTicketId, joinQueue, saveFcmToken } from '@/lib/queueStore';
-import { requestFcmToken } from '@/lib/pushNotifications';
+import { requestFcmToken, requestNotificationPermission } from '@/lib/pushNotifications';
 import AdBanner from '@/components/AdBanner';
 
 export const dynamic = 'force-dynamic';
@@ -47,20 +47,18 @@ export default function CustomerPortal({ params }) {
   }, [loading, business, slug, router, checked]);
 
   const handleRequestPermission = async () => {
-    if ('Notification' in window) {
-      try {
-        const res = await Notification.requestPermission();
-        setNotifState(res);
-        // Pre-fetch and cache FCM token immediately on permission grant
-        if (res === 'granted') {
-          try {
-            const token = await requestFcmToken();
-            if (token) localStorage.setItem('turnly_fcm_token', token);
-          } catch (_) {}
-        }
-      } catch (e) {
-        console.error(e);
+    try {
+      const res = await requestNotificationPermission();
+      setNotifState(res);
+      // Pre-fetch and cache FCM token immediately on permission grant
+      if (res === 'granted') {
+        try {
+          const token = await requestFcmToken();
+          if (token) localStorage.setItem('turnly_fcm_token', token);
+        } catch (_) {}
       }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -208,6 +206,18 @@ export default function CustomerPortal({ params }) {
                   <strong>Notifications Blocked</strong>
                   <p style={{ margin: '4px 0 0', lineHeight: 1.5 }}>
                     Notifications are disabled in your browser settings. You can still join, but please keep your screen open to see when it's your turn.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {notifState === 'unsupported' && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#475569', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>ℹ️</span>
+                <div>
+                  <strong>Push Notifications Not Supported</strong>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+                    Push notifications are not supported on this browser (on iOS, tap Share → Add to Home Screen to enable). You can still join — keep your screen open for live alerts &amp; audio.
                   </p>
                 </div>
               </div>
