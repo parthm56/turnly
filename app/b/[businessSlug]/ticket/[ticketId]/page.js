@@ -40,6 +40,7 @@ export default function TicketPage({ params }) {
   const [inputPhone, setInputPhone] = useState('');
   const [phoneSaving, setPhoneSaving] = useState(false);
   const [phoneSaved, setPhoneSaved] = useState(false);
+  const [isEditingPhone, setIsEditingPhone] = useState(false);
 
   const handleSavePhone = async (e) => {
     e.preventDefault();
@@ -48,6 +49,7 @@ export default function TicketPage({ params }) {
     try {
       await updateTokenPhone(slug, ticketId, inputPhone.trim());
       setPhoneSaved(true);
+      setIsEditingPhone(false);
     } catch (err) {
       console.error(err);
     } finally {
@@ -297,28 +299,62 @@ export default function TicketPage({ params }) {
         </div>
 
         {/* WhatsApp Notification Badge or Setup */}
-        {token.phone ? (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 22, lineHeight: 1 }}>💬</span>
-            <div style={{ flex: 1, fontSize: 13, color: '#166534' }}>
-              <p style={{ margin: 0, fontWeight: 700 }}>WhatsApp Alerts Active</p>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: '#15803d' }}>
-                We will alert <strong>{token.phone}</strong> on WhatsApp as soon as your turn arrives!
-              </p>
-            </div>
-          </div>
-        ) : (isWaiting && (
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ fontSize: 20, lineHeight: 1 }}>💬</span>
-              <div>
-                <strong style={{ fontSize: 13, color: '#1e293b' }}>Want WhatsApp Alerts?</strong>
-                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
-                  Going away or closing this tab? Enter your WhatsApp number to get an instant ping when called.
+        {token.phone && !isEditingPhone ? (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 22, lineHeight: 1 }}>💬</span>
+              <div style={{ flex: 1, fontSize: 13, color: '#166534' }}>
+                <p style={{ margin: 0, fontWeight: 700 }}>WhatsApp Alerts Active</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#15803d' }}>
+                  We will alert <strong>{token.phone}</strong> on WhatsApp when called!
                 </p>
               </div>
             </div>
-            {phoneSaved ? (
+            {isWaiting && (
+              <button
+                type="button"
+                onClick={() => { setInputPhone(token.phone); setIsEditingPhone(true); }}
+                style={{
+                  fontSize: 12,
+                  color: '#15803d',
+                  background: '#dcfce7',
+                  border: '1px solid #86efac',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}>
+                ✏️ Change
+              </button>
+            )}
+          </div>
+        ) : (isWaiting && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                <span style={{ fontSize: 20, lineHeight: 1 }}>💬</span>
+                <div>
+                  <strong style={{ fontSize: 13, color: '#1e293b' }}>
+                    {isEditingPhone ? 'Update WhatsApp Mobile #' : 'Want WhatsApp Alerts?'}
+                  </strong>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+                    {isEditingPhone
+                      ? 'Fix typos or enter a new number to receive your turn notification.'
+                      : 'Going away or closing this tab? Enter your WhatsApp number to get an instant ping when called.'}
+                  </p>
+                </div>
+              </div>
+              {isEditingPhone && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPhone(false)}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 14, cursor: 'pointer', padding: 4 }}>
+                  ✕
+                </button>
+              )}
+            </div>
+            {phoneSaved && !isEditingPhone ? (
               <p style={{ margin: '4px 0 0', fontSize: 12, color: '#16a34a', fontWeight: 700 }}>
                 ✅ WhatsApp number saved! You will receive an alert.
               </p>
@@ -337,7 +373,7 @@ export default function TicketPage({ params }) {
                   disabled={phoneSaving || !inputPhone.trim()}
                   className="btn-primary"
                   style={{ padding: '8px 14px', fontSize: 12, fontWeight: 700, background: '#16a34a', whiteSpace: 'nowrap' }}>
-                  {phoneSaving ? 'Saving…' : 'Notify Me'}
+                  {phoneSaving ? 'Saving…' : (isEditingPhone ? 'Update' : 'Notify Me')}
                 </button>
               </form>
             )}

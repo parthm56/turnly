@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { setBusinessOtpRequirement } from '@/lib/queueStore';
 
 export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
   const [status, setStatus] = useState('checking'); // 'checking' | 'open' | 'connecting' | 'close' | 'not_found'
@@ -7,6 +8,13 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [requireOtp, setRequireOtp] = useState(Boolean(business?.requireOtp));
+  const [savingOtp, setSavingOtp] = useState(false);
+
+  // Sync requireOtp when business prop updates
+  useEffect(() => {
+    setRequireOtp(Boolean(business?.requireOtp));
+  }, [business?.requireOtp]);
 
   // Test message state
   const [testPhone, setTestPhone] = useState('');
@@ -177,6 +185,30 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
     }
   };
 
+  const handleToggleOtp = async () => {
+    if (!isConnected) {
+      setError('Please connect your WhatsApp above before enabling OTP verification.');
+      return;
+    }
+    const nextVal = !requireOtp;
+    setSavingOtp(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      await setBusinessOtpRequirement(slug, nextVal);
+      setRequireOtp(nextVal);
+      setSuccessMsg(
+        nextVal
+          ? '🔒 WhatsApp OTP verification is now ACTIVE! Customers must verify their phone to join.'
+          : '✓ WhatsApp OTP verification disabled. Customers can now join instantly.'
+      );
+    } catch (err) {
+      setError('Failed to update verification setting. Please try again.');
+    } finally {
+      setSavingOtp(false);
+    }
+  };
+
   const isConnected = status === 'open';
 
   return (
@@ -267,6 +299,74 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
                 Disconnect
               </button>
             )}
+          </div>
+
+          {/* OTP Verification Toggle Card */}
+          <div style={{
+            background: requireOtp && isConnected ? '#f0fdf4' : '#fafaf9',
+            border: `1px solid ${requireOtp && isConnected ? '#bbf7d0' : '#e4e4e7'}`,
+            borderRadius: 14,
+            padding: '16px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 18 }}>🔒</span>
+                <strong style={{ fontSize: 14, color: '#18181b' }}>Queue Join Verification (WhatsApp OTP)</strong>
+                {requireOtp && isConnected && (
+                  <span style={{ fontSize: 11, background: '#dcfce7', color: '#15803d', padding: '1px 8px', borderRadius: 100, fontWeight: 700 }}>
+                    ACTIVE
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: '#71717a', lineHeight: 1.5 }}>
+                {isConnected
+                  ? (requireOtp
+                      ? 'Customers must verify a 4-digit WhatsApp code to join. Zero fake tokens or typos.'
+                      : 'Disabled. Customers enter their number and join immediately with 0 friction.')
+                  : 'Connect WhatsApp above to activate customer phone verification for your queue.'}
+              </p>
+            </div>
+
+            <label style={{
+              position: 'relative',
+              display: 'inline-block',
+              width: 50,
+              height: 28,
+              cursor: isConnected && !savingOtp ? 'pointer' : 'not-allowed',
+              opacity: isConnected ? 1 : 0.5,
+              flexShrink: 0,
+            }}>
+              <input
+                type="checkbox"
+                checked={requireOtp && isConnected}
+                disabled={!isConnected || savingOtp}
+                onChange={handleToggleOtp}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: requireOtp && isConnected ? '#16a34a' : '#cbd5e1',
+                borderRadius: 34,
+                transition: '0.3s',
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  height: 22,
+                  width: 22,
+                  left: requireOtp && isConnected ? 25 : 3,
+                  bottom: 3,
+                  background: '#ffffff',
+                  borderRadius: '50%',
+                  transition: '0.3s',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                }} />
+              </span>
+            </label>
           </div>
 
           {error && (

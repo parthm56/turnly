@@ -87,29 +87,41 @@ export default function CustomerPortal({ params }) {
   const waiting = business.tokens?.filter(t => t.status === 'WAITING').length || 0;
   const isOpen = business.queueState === 'OPEN';
 
-  const handleJoin = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (!name.trim()) { setError('Please enter your name.'); return; }
-    setJoining(true);
+  // OTP Verification state
+  const [step, setStep]                       = useState('form'); // 'form' | 'otp'
+  const [otpCode, setOtpCode]                 = useState('');
+  const [otpHash, setOtpHash]                 = useState('');
+  const [otpExpiresAt, setOtpExpiresAt]       = useState(null);
+  const [maskedPhone, setMaskedPhone]         = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const [sendingOtp, setSendingOtp]           = useState(false);
+  const [verifyingOtp, setVerifyingOtp]       = useState(false);
 
+  // 30s countdown timer for resending OTP
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCountdown]);
+
+  const completeJoin = async (phoneToSave) => {
+    setJoining(true);
     try {
       const numPartySize = Math.max(1, parseInt(partySize, 10) || 1);
-      const result = await joinQueue(slug, name, phone, numPartySize);
+      const result = await joinQueue(slug, name, phoneToSave, numPartySize);
       if (result?.error === 'QUEUE_CLOSED') { setError('Queue is currently stopped. Please wait.'); return; }
       if (result?.error) { setError(result.error); return; }
 
-      // Use cached FCM token (pre-fetched on permission grant) or fetch fresh one
+      // Use cached FCM token or fetch fresh one
       if ('Notification' in window && Notification.permission === 'granted') {
         try {
           let fcmToken = localStorage.getItem('turnly_fcm_token');
           if (!fcmToken) fcmToken = await requestFcmToken();
           if (fcmToken) {
-            if (fcmToken) localStorage.setItem('turnly_fcm_token', fcmToken);
+            localStorage.setItem('turnly_fcm_token', fcmToken);
             await saveFcmToken(slug, result.id, fcmToken);
-            console.log('[Turnly] FCM token saved to Firebase:', fcmToken.substring(0, 20) + '...');
-          } else {
-            console.warn('[Turnly] No FCM token available on join');
           }
         } catch (e) {
           console.error('[Turnly] FCM token save error:', e);
@@ -121,6 +133,91 @@ export default function CustomerPortal({ params }) {
       setError('Connection error. Please try again.');
     } finally {
       setJoining(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setError('');
+    if (!name.trim()) { setError('Please enter your full name.'); return; }
+    if (!phone.trim()) { setError('Please enter your WhatsApp mobile number.'); return; }
+
+    const cleanDigits = phone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      setError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    setSendingOtp(true);
+    try {
+      const res = await fetch('/api/whatsapp/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug,
+          phone,
+          businessName: business.name,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOtpHash(data.hash);
+        setOtpExpiresAt(data.expiresAt);
+        setMaskedPhone(data.maskedPhone || phone);
+        setStep('otp');
+        setResendCountdown(30);
+      } else {
+        setError(data.error || 'Failed to send WhatsApp verification code.');
+      }
+    } catch (err) {
+      setError('Network error sending verification code. Please try again.');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyAndJoin = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!otpCode || otpCode.trim().length !== 4) {
+      setError('Please enter the 4-digit verification code.');
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      const res = await fetch('/api/whatsapp/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug,
+          phone,
+          code: otpCode.trim(),
+          hash: otpHash,
+          expiresAt: otpExpiresAt,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await completeJoin(data.phone || phone);
+      } else {
+        setError(data.error || 'Incorrect verification code.');
+      }
+    } catch (err) {
+      setError('Verification failed. Please check your code and try again.');
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!name.trim()) { setError('Please enter your name.'); return; }
+
+    if (business.requireOtp) {
+      await handleSendOtp();
+    } else {
+      await completeJoin(phone);
     }
   };
 
@@ -229,85 +326,201 @@ export default function CustomerPortal({ params }) {
               </div>
             )}
 
-            <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label>Your Full Name *</label>
-                <input type="text" placeholder="e.g. Sarah Jenkins" value={name}
-                  onChange={e => setName(e.target.value)} required disabled={joining} />
-              </div>
-
-              <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>WhatsApp Mobile #</span>
-                  <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, background: '#f0fdf4', padding: '1px 6px', borderRadius: 4 }}>Optional</span>
-                </label>
-                <input type="tel" placeholder="e.g. 9876543210" value={phone}
-                  onChange={e => setPhone(e.target.value)} disabled={joining} />
-                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#64748b' }}>
-                  💬 Receive an instant WhatsApp alert when your turn is called.
-                </p>
-              </div>
-
-              <div>
-                <label>Number of Persons *</label>
-                <div style={{ display: 'flex', gap: 12, marginTop: 6, alignItems: 'center' }}>
-                  <input
-                    type="number"
-                    min="1"
-                    max="99"
-                    value={partySize}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (val === '') {
-                        setPartySize('');
-                      } else {
-                        const parsed = parseInt(val, 10);
-                        if (!isNaN(parsed)) setPartySize(parsed);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (partySize === '' || parseInt(partySize, 10) < 1) {
-                        setPartySize(1);
-                      }
-                    }}
-                    required
-                    disabled={joining}
-                    style={{
-                      width: 100,
-                      fontSize: 16,
-                      fontWeight: 700,
-                      textAlign: 'center',
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(0,0,0,0.18)',
-                    }}
-                  />
-                  <span style={{ fontSize: 13, color: '#666', fontWeight: 600 }}>
-                    {Number(partySize) === 1 ? 'person' : 'persons'}
-                  </span>
+            {step === 'otp' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: 32 }}>💬</span>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: '8px 0 4px', color: '#18181b' }}>
+                    Verify Your WhatsApp
+                  </h2>
+                  <p style={{ fontSize: 13, color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                    We sent a 4-digit code to <strong>{maskedPhone}</strong> via WhatsApp.
+                  </p>
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                  {[1, 2, 3, 4, 5, 6].map(n => (
-                    <button key={n} type="button"
-                      onClick={() => setPartySize(n)}
-                      disabled={joining}
+
+                {error && (
+                  <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 14px', color: '#b91c1c', fontSize: 13 }}>
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifyAndJoin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6, textAlign: 'center' }}>
+                      ENTER 4-DIGIT CODE
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                      autoFocus
+                      required
+                      disabled={verifyingOtp || joining}
                       style={{
-                        padding: '6px 12px', borderRadius: 8,
-                        border: partySize === n ? '2px solid #111' : '1px solid rgba(0,0,0,0.12)',
-                        background: partySize === n ? '#111' : '#fafaf9',
-                        color: partySize === n ? '#fff' : '#444',
-                        fontWeight: partySize === n ? 700 : 500, fontSize: 12, cursor: 'pointer',
-                      }}>
-                      {n} {n === 1 ? 'Person' : 'Persons'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                        width: '100%',
+                        fontSize: 28,
+                        fontWeight: 800,
+                        letterSpacing: 12,
+                        textAlign: 'center',
+                        padding: '12px 16px',
+                        borderRadius: 12,
+                        border: '2px solid #cbd5e1',
+                        background: '#f8fafc',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
 
-              <button type="submit" className="btn-primary" disabled={joining} style={{ marginTop: 4 }}>
-                {joining ? 'Joining...' : 'Join Queue →'}
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    disabled={verifyingOtp || joining || otpCode.length !== 4}
+                    className="btn-primary"
+                    style={{
+                      padding: '12px 20px',
+                      fontSize: 14,
+                      fontWeight: 700,
+                      background: '#16a34a',
+                      cursor: verifyingOtp || joining ? 'wait' : 'pointer',
+                    }}>
+                    {verifyingOtp || joining ? 'Verifying & Getting Ticket…' : '✓ Verify & Get Token'}
+                  </button>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, paddingTop: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setStep('form'); setError(''); setOtpCode(''); }}
+                      disabled={verifyingOtp || joining}
+                      style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                      ✏️ Change Number
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={verifyingOtp || joining || resendCountdown > 0 || sendingOtp}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: resendCountdown > 0 ? '#94a3b8' : '#16a34a',
+                        fontWeight: 600,
+                        cursor: resendCountdown > 0 ? 'default' : 'pointer',
+                        padding: 0,
+                      }}>
+                      {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : '🔄 Resend Code'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label>Your Full Name *</label>
+                  <input type="text" placeholder="e.g. Sarah Jenkins" value={name}
+                    onChange={e => setName(e.target.value)} required disabled={sendingOtp || joining} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>WhatsApp Mobile #</span>
+                    {business.requireOtp ? (
+                      <span style={{ fontSize: 11, color: '#15803d', fontWeight: 700, background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>
+                        🔒 Required (OTP Verified)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, background: '#f0fdf4', padding: '1px 6px', borderRadius: 4 }}>
+                        Optional
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. 9876543210"
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    required={Boolean(business.requireOtp)}
+                    disabled={sendingOtp || joining}
+                  />
+                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#64748b' }}>
+                    {business.requireOtp
+                      ? '💬 We will send a 4-digit verification code to this WhatsApp number.'
+                      : '💬 Receive an instant WhatsApp alert when your turn is called.'}
+                  </p>
+                </div>
+
+                <div>
+                  <label>Number of Persons *</label>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 6, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={partySize}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setPartySize('');
+                        } else {
+                          const parsed = parseInt(val, 10);
+                          if (!isNaN(parsed)) setPartySize(parsed);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (partySize === '' || parseInt(partySize, 10) < 1) {
+                          setPartySize(1);
+                        }
+                      }}
+                      required
+                      disabled={sendingOtp || joining}
+                      style={{
+                        width: 100,
+                        fontSize: 16,
+                        fontWeight: 700,
+                        textAlign: 'center',
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(0,0,0,0.18)',
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: '#666', fontWeight: 600 }}>
+                      {Number(partySize) === 1 ? 'person' : 'persons'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 4, 5, 6].map(n => (
+                      <button key={n} type="button"
+                        onClick={() => setPartySize(n)}
+                        disabled={sendingOtp || joining}
+                        style={{
+                          padding: '6px 12px', borderRadius: 8,
+                          border: partySize === n ? '2px solid #111' : '1px solid rgba(0,0,0,0.12)',
+                          background: partySize === n ? '#111' : '#fafaf9',
+                          color: partySize === n ? '#fff' : '#444',
+                          fontWeight: partySize === n ? 700 : 500, fontSize: 12, cursor: 'pointer',
+                        }}>
+                        {n} {n === 1 ? 'Person' : 'Persons'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={sendingOtp || joining}
+                  style={{
+                    marginTop: 4,
+                    background: business.requireOtp ? '#16a34a' : undefined,
+                  }}>
+                  {business.requireOtp
+                    ? (sendingOtp ? 'Sending WhatsApp Code…' : '📲 Continue & Verify WhatsApp')
+                    : (joining ? 'Joining...' : 'Join Queue →')}
+                </button>
+              </form>
+            )}
           </div>
         )}
 
