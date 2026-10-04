@@ -351,3 +351,4 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
     </div>
   );
 }
+

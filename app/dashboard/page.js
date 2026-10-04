@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
 import { setQueueState, callCustomer, updateStatus } from '@/lib/queueStore';
@@ -29,6 +29,21 @@ export default function DashboardPage() {
     if (!s) { router.push('/auth/login'); return; }
     setSlug(s);
   }, [router]);
+
+  const checkWhatsApp = useCallback(async () => {
+    if (!slug) return;
+    try {
+      const res = await fetch(`/api/whatsapp/status?slug=${slug}`);
+      const data = await res.json();
+      setWhatsAppStatus(data.state || 'close');
+    } catch (_) {
+      setWhatsAppStatus('close');
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (slug) checkWhatsApp();
+  }, [slug, checkWhatsApp]);
 
   const { business, loading } = useBusinessData(slug);
 
@@ -69,21 +84,6 @@ export default function DashboardPage() {
   const displayPartySizes = selectedGroup === 'all'
     ? sortedPartySizes
     : sortedPartySizes.filter(size => String(size) === String(selectedGroup));
-
-  const checkWhatsApp = async () => {
-    if (!slug) return;
-    try {
-      const res = await fetch(`/api/whatsapp/status?slug=${slug}`);
-      const data = await res.json();
-      setWhatsAppStatus(data.state || 'close');
-    } catch (_) {
-      setWhatsAppStatus('close');
-    }
-  };
-
-  useEffect(() => {
-    if (slug) checkWhatsApp();
-  }, [slug]);
 
   const act = async (fn) => {
     setActionLoading(true);

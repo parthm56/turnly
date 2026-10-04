@@ -14,3 +14,4 @@ export async function GET(req) {
   const result = await getWhatsAppStatus(slug);
   return NextResponse.json(result);
 }
+
