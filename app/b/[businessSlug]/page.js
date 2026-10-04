@@ -237,9 +237,15 @@ export default function CustomerPortal({ params }) {
               </div>
 
               <div>
-                <label>Phone Number</label>
-                <input type="tel" placeholder="+1 (555) 000-0000" value={phone}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>WhatsApp Mobile #</span>
+                  <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, background: '#f0fdf4', padding: '1px 6px', borderRadius: 4 }}>Optional</span>
+                </label>
+                <input type="tel" placeholder="e.g. 9876543210" value={phone}
                   onChange={e => setPhone(e.target.value)} disabled={joining} />
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#64748b' }}>
+                  💬 Receive an instant WhatsApp alert when your turn is called.
+                </p>
               </div>
 
               <div>

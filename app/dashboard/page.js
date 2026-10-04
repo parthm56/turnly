@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
 import { setQueueState, callCustomer, updateStatus } from '@/lib/queueStore';
 import AccountSettingsModal from '@/components/AccountSettingsModal';
+import WhatsAppSettingsModal from '@/components/WhatsAppSettingsModal';
 
 const STATUS_CLASS = {
   WAITING: 'badge-waiting',
@@ -20,6 +21,8 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isWhatsAppOpen, setIsWhatsAppOpen] = useState(false);
+  const [whatsAppStatus, setWhatsAppStatus] = useState('checking');
 
   useEffect(() => {
     const s = localStorage.getItem('turnly_staff_slug');
@@ -67,6 +70,21 @@ export default function DashboardPage() {
     ? sortedPartySizes
     : sortedPartySizes.filter(size => String(size) === String(selectedGroup));
 
+  const checkWhatsApp = async () => {
+    if (!slug) return;
+    try {
+      const res = await fetch(`/api/whatsapp/status?slug=${slug}`);
+      const data = await res.json();
+      setWhatsAppStatus(data.state || 'close');
+    } catch (_) {
+      setWhatsAppStatus('close');
+    }
+  };
+
+  useEffect(() => {
+    if (slug) checkWhatsApp();
+  }, [slug]);
+
   const act = async (fn) => {
     setActionLoading(true);
     try { await fn(); } finally { setActionLoading(false); }
@@ -85,6 +103,28 @@ export default function DashboardPage() {
             style={{ fontSize: 12, color: '#1a5c3a', fontWeight: 600, textDecoration: 'none' }}>
             Customer Portal ↗
           </a>
+          <button className="btn-secondary" style={{
+            padding: '8px 16px',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: whatsAppStatus === 'open' ? '#f0fdf4' : '#fff',
+            borderColor: whatsAppStatus === 'open' ? '#86efac' : 'rgba(0,0,0,0.1)',
+            color: whatsAppStatus === 'open' ? '#166534' : 'inherit',
+            fontWeight: whatsAppStatus === 'open' ? 700 : 500,
+          }}
+            onClick={() => setIsWhatsAppOpen(true)}>
+            <span>💬</span>
+            <span>{whatsAppStatus === 'open' ? 'WhatsApp Connected' : 'Connect WhatsApp'}</span>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: whatsAppStatus === 'open' ? '#22c55e' : whatsAppStatus === 'connecting' ? '#eab308' : '#cbd5e1',
+              display: 'inline-block',
+            }} />
+          </button>
           <button className="btn-secondary" style={{ padding: '8px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
             onClick={() => setIsSettingsOpen(true)}>
             ⚙️ Account Settings
@@ -105,6 +145,16 @@ export default function DashboardPage() {
         business={business}
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* WhatsApp Settings Modal */}
+      <WhatsAppSettingsModal
+        business={business}
+        isOpen={isWhatsAppOpen}
+        onClose={() => {
+          setIsWhatsAppOpen(false);
+          checkWhatsApp();
+        }}
       />
 
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 16px', display: 'flex', flexDirection: 'column', gap: 24 }}>
