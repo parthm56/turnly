@@ -63,22 +63,64 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
 
       if (data.success) {
         if (data.qrcode) {
-          // Format base64 properly if needed
           const formattedQr = data.qrcode.startsWith('data:image')
             ? data.qrcode
             : `data:image/png;base64,${data.qrcode}`;
           setQrCode(formattedQr);
           setStatus('connecting');
+          setLoading(false);
+          return;
         } else if (data.state === 'open') {
           setStatus('open');
           setSuccessMsg('WhatsApp is already connected and active!');
+          setLoading(false);
+          return;
         }
+
+        // If instance was created but QR is still generating, poll for it
+        setStatus('connecting');
+        let attempts = 0;
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const pollRes = await fetch('/api/whatsapp/connect', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slug }),
+            });
+            const pollData = await pollRes.json();
+            if (pollData.qrcode) {
+              clearInterval(pollInterval);
+              const formattedQr = pollData.qrcode.startsWith('data:image')
+                ? pollData.qrcode
+                : `data:image/png;base64,${pollData.qrcode}`;
+              setQrCode(formattedQr);
+              setStatus('connecting');
+              setLoading(false);
+            } else if (pollData.state === 'open') {
+              clearInterval(pollInterval);
+              setStatus('open');
+              setSuccessMsg('WhatsApp is already connected and active!');
+              setLoading(false);
+            } else if (attempts >= 8) {
+              clearInterval(pollInterval);
+              setLoading(false);
+              setError('QR code took too long to generate. Please click Connect WhatsApp again.');
+            }
+          } catch (_) {
+            if (attempts >= 8) {
+              clearInterval(pollInterval);
+              setLoading(false);
+              setError('Failed to reach WhatsApp service. Please try again in a moment.');
+            }
+          }
+        }, 2500);
       } else {
         setError(data.error || 'Failed to start WhatsApp connection.');
+        setLoading(false);
       }
     } catch (err) {
       setError('Connection failed. Make sure your WhatsApp server is running.');
-    } finally {
       setLoading(false);
     }
   };
@@ -244,6 +286,12 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
             <div>
               {!qrCode ? (
                 <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <style>{`
+                    @keyframes waSpin {
+                      from { transform: rotate(0deg); }
+                      to { transform: rotate(360deg); }
+                    }
+                  `}</style>
                   <p style={{ fontSize: 13, color: '#52525b', lineHeight: 1.5, marginBottom: 16 }}>
                     Connect your WhatsApp number using WhatsApp Web (Linked Devices). Your personal number is not shared—messages will be sent on behalf of <strong>{business.name}</strong>.
                   </p>
@@ -255,13 +303,30 @@ export default function WhatsAppSettingsModal({ business, isOpen, onClose }) {
                       padding: '12px 24px',
                       fontSize: 14,
                       fontWeight: 700,
-                      background: '#16a34a',
+                      background: loading ? '#64748b' : '#16a34a',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 8,
+                      cursor: loading ? 'wait' : 'pointer',
                     }}>
-                    {loading ? 'Initializing WhatsApp…' : '📲 Connect WhatsApp (Scan QR Code)'}
+                    {loading ? '⏳ Generating WhatsApp QR…' : '📲 Connect WhatsApp (Scan QR Code)'}
                   </button>
+
+                  {loading && (
+                    <div style={{ marginTop: 20, padding: '14px 18px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                      <div style={{
+                        width: 20,
+                        height: 20,
+                        border: '3px solid #cbd5e1',
+                        borderTopColor: '#16a34a',
+                        borderRadius: '50%',
+                        animation: 'waSpin 0.8s linear infinite',
+                      }} />
+                      <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                        Connecting to WhatsApp server & generating QR code…
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 16, background: '#f8fafc', padding: 20, borderRadius: 16, border: '1px solid #e2e8f0' }}>
