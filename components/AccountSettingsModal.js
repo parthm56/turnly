@@ -1,11 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   updateBusinessProfile,
   updateStaffEmail,
   updateStaffPassword,
   deleteBusinessAccount,
+  getCategories,
 } from '@/lib/queueStore';
 import { evaluatePasswordStrength } from '@/lib/security';
 
@@ -16,6 +17,7 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
   // Profile state
   const [name, setName] = useState(business?.name || '');
   const [category, setCategory] = useState(business?.category || '');
+  const [categories, setCategories] = useState([]);
   const [profileMsg, setProfileMsg] = useState('');
   const [profileErr, setProfileErr] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
@@ -41,6 +43,12 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const passwordStrength = evaluatePasswordStrength(newPassword);
+
+  // Category options come from the database, not a hardcoded list
+  useEffect(() => {
+    if (!isOpen) return;
+    getCategories().then(setCategories).catch(() => setCategories([]));
+  }, [isOpen]);
 
   if (!isOpen || !business) return null;
 
@@ -244,7 +252,21 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
 
               <div>
                 <label>Category / Industry</label>
-                <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Healthcare, Salon, Restaurant" disabled={profileLoading} />
+                {categories.length > 0 ? (
+                  <select value={category} onChange={(e) => setCategory(e.target.value)} disabled={profileLoading}>
+                    <option value="">Select a category…</option>
+                    {/* Keep an existing value that predates the managed list so saving never clears it */}
+                    {category && !categories.includes(category) && (
+                      <option value={category}>{category}</option>
+                    )}
+                    {categories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  // No managed categories in the database yet - keep free text so edits still work
+                  <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Healthcare, Salon, Restaurant" disabled={profileLoading} />
+                )}
               </div>
 
               <div>

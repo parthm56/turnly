@@ -3,6 +3,10 @@
     "queues": {
       ".read": true,
       ".write": true
+    },
+    "categories": {
+      ".read": true,
+      ".write": false
     }
   }
 }

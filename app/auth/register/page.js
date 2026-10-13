@@ -1,7 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { registerBusiness } from '@/lib/queueStore';
+import { registerBusiness, getCategories } from '@/lib/queueStore';
 import { isValidEmail, sanitizeSlug, evaluatePasswordStrength } from '@/lib/security';
 import Link from 'next/link';
 
@@ -12,10 +12,16 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [category, setCategory] = useState('');
+  const [categories, setCategories] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const strength = evaluatePasswordStrength(password);
+
+  // Category options come from the database, not a hardcoded list
+  useEffect(() => {
+    getCategories().then(setCategories).catch(() => setCategories([]));
+  }, []);
 
   const handleNameChange = (e) => {
     setName(e.target.value);
@@ -38,6 +44,11 @@ export default function RegisterPage() {
 
     if (strength.score < 4) {
       setError('Please choose a stronger password matching all rule requirements below.');
+      return;
+    }
+
+    if (categories.length && !category) {
+      setError('Please select a category.');
       return;
     }
 
@@ -167,14 +178,29 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label>Category (optional)</label>
-            <input
-              type="text"
-              placeholder="e.g. Healthcare, Restaurant, Salon"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={loading}
-            />
+            <label>Category{categories.length === 0 && ' (optional)'}</label>
+            {categories.length > 0 ? (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+                disabled={loading}
+              >
+                <option value="">Select a category…</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            ) : (
+              // No managed categories in the database yet - keep free text so signup still works
+              <input
+                type="text"
+                placeholder="e.g. Healthcare, Restaurant, Salon"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                disabled={loading}
+              />
+            )}
           </div>
 
           <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: 8 }}>
