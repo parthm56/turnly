@@ -8,13 +8,15 @@ import {
   deleteBusinessAccount,
   getCategories,
   DEFAULT_CATEGORIES,
+  setQueueMode as saveQueueMode,
 } from '@/lib/queueStore';
 import { evaluatePasswordStrength } from '@/lib/security';
+import { QUEUE_MODES, normaliseQueueMode, modeName } from '@/lib/queueModes.mjs';
 import FieldsEditor from '@/components/FieldsEditor';
 
 export default function AccountSettingsModal({ business, isOpen, onClose }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'form' | 'security' | 'danger'
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'queue' | 'form' | 'security' | 'danger'
 
   // Profile state
   const [name, setName] = useState(business?.name || '');
@@ -23,6 +25,12 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
   const [profileMsg, setProfileMsg] = useState('');
   const [profileErr, setProfileErr] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
+
+  // Queue mode state (standard | order) — one mode active at a time
+  const [queueMode, setQueueMode] = useState(normaliseQueueMode(business?.queueMode));
+  const [queueMsg, setQueueMsg] = useState('');
+  const [queueErr, setQueueErr] = useState('');
+  const [queueLoading, setQueueLoading] = useState(false);
 
   // Email state
   const [emailCurrentPass, setEmailCurrentPass] = useState('');
@@ -52,6 +60,12 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
     getCategories().then(setCategories).catch(() => setCategories(DEFAULT_CATEGORIES));
   }, [isOpen]);
 
+  // Re-read the saved queue mode whenever the modal opens, so a change made
+  // elsewhere is never shown stale.
+  useEffect(() => {
+    if (isOpen) setQueueMode(normaliseQueueMode(business?.queueMode));
+  }, [isOpen, business?.queueMode]);
+
   if (!isOpen || !business) return null;
 
   // 1. Save Profile
@@ -68,6 +82,22 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
       setProfileErr('Failed to update profile.');
     } finally {
       setProfileLoading(false);
+    }
+  };
+
+  // 1b. Save Queue Mode
+  const handleSaveQueueMode = async () => {
+    setQueueMsg('');
+    setQueueErr('');
+    setQueueLoading(true);
+    try {
+      const res = await saveQueueMode(business.slug, queueMode);
+      if (res?.error) setQueueErr(res.error);
+      else setQueueMsg(`${modeName(res.queueMode)} is now the active mode.`);
+    } catch (err) {
+      setQueueErr('Failed to update queue mode.');
+    } finally {
+      setQueueLoading(false);
     }
   };
 
@@ -154,6 +184,13 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
     }
   };
 
+  // Switching modes mid-queue is allowed, but a token on a step that only exists in
+  // the other mode would stop appearing on the dashboard — so warn before saving.
+  const liveTokens = (business.tokens || []).filter(
+    (t) => !['COMPLETED', 'NO_SHOW', 'CANCELLED'].includes(t.status),
+  );
+  const modeChanging = queueMode !== normaliseQueueMode(business.queueMode);
+
   return (
     <div style={{
       position: 'fixed',
@@ -190,7 +227,7 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
         </div>
 
         {/* Navigation Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '0 24px', background: '#fafaf9' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '0 24px', background: '#fafaf9', overflowX: 'auto' }}>
           <button
             onClick={() => setActiveTab('profile')}
             style={{
@@ -205,6 +242,22 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
             }}
           >
             🏢 Profile
+          </button>
+          <button
+            onClick={() => setActiveTab('queue')}
+            style={{
+              padding: '12px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              border: 'none',
+              borderBottom: activeTab === 'queue' ? '2px solid #18181b' : '2px solid transparent',
+              background: 'transparent',
+              color: activeTab === 'queue' ? '#18181b' : '#71717a',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            🎫 Queue Mode
           </button>
           <button
             onClick={() => setActiveTab('form')}
@@ -295,6 +348,73 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
                 {profileLoading ? 'Saving...' : 'Save Profile Changes'}
               </button>
             </form>
+          )}
+
+          {/* TAB 1a: QUEUE MODE */}
+          {activeTab === 'queue' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {queueMsg && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 14px', borderRadius: 10, color: '#166534', fontSize: 13 }}>{queueMsg}</div>}
+              {queueErr && <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', padding: '10px 14px', borderRadius: 10, color: '#b91c1c', fontSize: 13 }}>{queueErr}</div>}
+
+              <p style={{ fontSize: 13, color: '#666', margin: 0, lineHeight: 1.5 }}>
+                Choose how customers move through your queue. One mode is active at a time, and switching takes effect immediately.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {QUEUE_MODES.map(m => {
+                  const selected = queueMode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      disabled={queueLoading}
+                      onClick={() => { setQueueMode(m.id); setQueueMsg(''); setQueueErr(''); }}
+                      style={{
+                        textAlign: 'left',
+                        padding: '16px 18px',
+                        borderRadius: 14,
+                        cursor: queueLoading ? 'wait' : 'pointer',
+                        border: selected ? '2px solid #18181b' : '1px solid rgba(0,0,0,0.12)',
+                        background: selected ? '#f4f4f5' : '#ffffff',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 15, fontWeight: 800, color: '#18181b' }}>{m.name}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#e7f5ed', padding: '2px 10px', borderRadius: 100 }}>{m.tagline}</span>
+                      </div>
+                      <p style={{ fontSize: 12, color: '#666', margin: '6px 0 0', lineHeight: 1.5 }}>{m.description}</p>
+                      {selected && (
+                        <p style={{ fontSize: 11, fontWeight: 800, color: '#18181b', margin: '8px 0 0' }}>✓ Currently active</p>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {modeChanging && liveTokens.length > 0 && (
+                <div style={{ background: '#fef9c3', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 10, color: '#713f12', fontSize: 12, lineHeight: 1.5 }}>
+                  ⚠️ {liveTokens.length} customer{liveTokens.length === 1 ? ' is' : 's are'} still in the queue.
+                  They keep their current step, but the dashboard only shows the steps for the active mode.
+                  Use <strong>■ End Queue</strong> on the dashboard first for a clean switch.
+                </div>
+              )}
+
+              {queueMode === 'order' && !(business.fields?.length > 0) && (
+                <div style={{ background: '#fef9c3', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 10, color: '#713f12', fontSize: 12, lineHeight: 1.5 }}>
+                  ⚠️ Order Queue works best with a menu. Add items under the <strong>📋 Customer Form</strong> tab so customers can pick what they are ordering.
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={queueLoading || queueMode === normaliseQueueMode(business.queueMode)}
+                onClick={handleSaveQueueMode}
+                style={{ alignSelf: 'flex-start' }}
+              >
+                {queueLoading ? 'Saving…' : 'Save Queue Mode'}
+              </button>
+            </div>
           )}
 
           {/* TAB 1b: CUSTOMER FORM */}

@@ -109,6 +109,7 @@ export default function CustomerPortal({ params }) {
 
   const waiting = business.tokens?.filter(t => t.status === 'WAITING').length || 0;
   const isOpen = business.queueState === 'OPEN';
+  const isOrderMode = business.queueMode === 'order';
 
   const completeJoin = async (phoneToSave) => {
     setJoining(true);
@@ -259,8 +260,14 @@ export default function CustomerPortal({ params }) {
         {/* Join Form */}
         {isOpen && (
           <div className="card" style={{ padding: '24px 28px' }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>Join the Queue</h2>
-            <p style={{ fontSize: 13, color: '#888', margin: '0 0 20px' }}>Fill in your details to receive a digital token.</p>
+            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>
+              {isOrderMode ? 'Place Your Order' : 'Join the Queue'}
+            </h2>
+            <p style={{ fontSize: 13, color: '#888', margin: '0 0 20px' }}>
+              {isOrderMode
+                ? 'Pick what you would like, then pay at the counter to confirm your order.'
+                : 'Fill in your details to receive a digital token.'}
+            </p>
 
             {/* Notification Permission Card */}
             {notifState === 'default' && (
@@ -560,6 +567,12 @@ export default function CustomerPortal({ params }) {
                   </div>
                 ))}
 
+                {isOrderMode && (
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#1e3a8a', lineHeight: 1.5 }}>
+                    💵 Pay at the counter — staff will confirm your order and start preparing it.
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   className="btn-primary"
@@ -570,7 +583,9 @@ export default function CustomerPortal({ params }) {
                   }}>
                   {business.requireOtp
                     ? (sendingOtp ? 'Sending WhatsApp Code…' : '📲 Continue & Verify WhatsApp')
-                    : (joining ? 'Joining...' : 'Join Queue →')}
+                    : joining
+                      ? (isOrderMode ? 'Placing Order...' : 'Joining...')
+                      : (isOrderMode ? 'Place Order →' : 'Join Queue →')}
                 </button>
               </form>
             )}

@@ -13,6 +13,8 @@ const STATUS_LABEL = {
   WAITING:   'Waiting in Line',
   CALLED:    "📣 It's Your Turn!",
   SERVING:   'Now Being Served',
+  CONFIRMED: '✅ Order Confirmed',
+  PREPARING: '👨‍🍳 Being Prepared',
   COMPLETED: 'Service Complete',
   NO_SHOW:   'Marked No-Show',
   CANCELLED: 'Cancelled',
@@ -22,6 +24,8 @@ const STATUS_CLASS = {
   WAITING:   'badge-waiting',
   CALLED:    'badge-called',
   SERVING:   'badge-serving',
+  CONFIRMED: 'badge-confirmed',
+  PREPARING: 'badge-preparing',
   COMPLETED: 'badge-completed',
   NO_SHOW:   'badge-noshow',
   CANCELLED: 'badge-cancelled',
@@ -283,6 +287,19 @@ export default function TicketPage({ params }) {
             </div>
           )}
         </div>
+
+        {/* Order Queue: pay at the counter while waiting for staff to confirm */}
+        {isWaiting && business?.queueMode === 'order' && (
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>💵</span>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: 13, color: '#1e3a8a', margin: '0 0 4px' }}>Pay at the counter</p>
+              <p style={{ fontSize: 12, color: '#1e40af', margin: 0, lineHeight: 1.5 }}>
+                Show token #{token.number} at the counter to pay. Staff will confirm your order, then the kitchen starts preparing it.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Details */}
         <div className="card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>

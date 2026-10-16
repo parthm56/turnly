@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
 import { setQueueState, callCustomer, updateStatus } from '@/lib/queueStore';
+import { normaliseQueueMode, modeName, STANDARD_ACTIVE, ORDER_NEW, ORDER_CONFIRM, FINISHED } from '@/lib/queueModes.mjs';
 import AccountSettingsModal from '@/components/AccountSettingsModal';
 import WhatsAppSettingsModal from '@/components/WhatsAppSettingsModal';
 
@@ -10,6 +11,8 @@ const STATUS_CLASS = {
   WAITING: 'badge-waiting',
   CALLED: 'badge-called',
   SERVING: 'badge-serving',
+  CONFIRMED: 'badge-confirmed',
+  PREPARING: 'badge-preparing',
   COMPLETED: 'badge-completed',
   NO_SHOW: 'badge-noshow',
   CANCELLED: 'badge-cancelled',
@@ -32,6 +35,32 @@ function TokenDetails({ details }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** One order row, shared by the New Queue and Confirm Order Queue lists. */
+function OrderRow({ token, children }) {
+  return (
+    <div style={{
+      background: '#fff',
+      border: '1px solid rgba(0,0,0,0.08)',
+      borderRadius: 12,
+      padding: '16px 20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      flexWrap: 'wrap',
+      gap: 12,
+      marginBottom: 12,
+    }}>
+      <div>
+        <span style={{ fontSize: 22, fontWeight: 900, marginRight: 12 }}>#{token.number}</span>
+        <span style={{ fontSize: 15, fontWeight: 600 }}>{token.customerName}</span>
+        {token.phone ? <span style={{ fontSize: 13, color: '#666', marginLeft: 8 }}>{token.phone}</span> : null}
+        <TokenDetails details={token.details} />
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>{children}</div>
     </div>
   );
 }
@@ -87,10 +116,17 @@ export default function DashboardPage() {
     );
   }
 
+  const queueMode = normaliseQueueMode(business.queueMode);
+  const isOrderMode = queueMode === 'order';
+
   const tokens = business.tokens || [];
+  const byCreatedAt = (a, b) => (a.createdAt || 0) - (b.createdAt || 0);
   const waiting  = tokens.filter(t => t.status === 'WAITING');
-  const active   = tokens.filter(t => t.status === 'CALLED' || t.status === 'SERVING');
-  const done     = tokens.filter(t => ['COMPLETED', 'NO_SHOW', 'CANCELLED'].includes(t.status));
+  const active   = tokens.filter(t => STANDARD_ACTIVE.includes(t.status));
+  // Order mode splits the queue in two: New Queue, then the Confirm Order Queue.
+  const newOrders     = tokens.filter(t => ORDER_NEW.includes(t.status)).sort(byCreatedAt);
+  const confirmOrders = tokens.filter(t => ORDER_CONFIRM.includes(t.status)).sort(byCreatedAt);
+  const done     = tokens.filter(t => FINISHED.includes(t.status));
   const queueUrl = typeof window !== 'undefined' ? `${window.location.origin}/b/${slug}` : '';
 
   // Group waiting list by party size (number of persons)
@@ -117,7 +153,7 @@ export default function DashboardPage() {
       <div style={{ background: '#fff', borderBottom: '1px solid rgba(0,0,0,0.1)', padding: '14px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{business.name}</h1>
-          <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Dispatch Console · /b/{slug}</p>
+          <p style={{ fontSize: 12, color: '#888', margin: 0 }}>Dispatch Console · /b/{slug} · {modeName(queueMode)}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <a href={`/b/${slug}`} target="_blank" rel="noreferrer"
@@ -214,6 +250,72 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ─── Order Queue mode: New Queue → Confirm Order Queue ─── */}
+        {isOrderMode && (
+          <>
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{ marginBottom: 16 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                  🆕 New Queue <span style={{ fontWeight: 400, color: '#888', fontSize: 15 }}>({newOrders.length})</span>
+                </h2>
+                <p style={{ fontSize: 12, color: '#888', margin: '2px 0 0' }}>
+                  Customers who placed an order. Collect payment, then confirm the order to send it to the kitchen.
+                </p>
+              </div>
+
+              {newOrders.length === 0 ? (
+                <p style={{ color: '#999', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>No new orders.</p>
+              ) : newOrders.map(t => (
+                <OrderRow key={t.id} token={t}>
+                  <button className="btn-primary" disabled={actionLoading}
+                    style={{ padding: '8px 16px', fontSize: 12, background: '#1a5c3a' }}
+                    onClick={() => act(() => updateStatus(slug, t.id, 'CONFIRMED'))}>
+                    ✓ Confirm Order &amp; Payment
+                  </button>
+                  <button className="btn-danger" disabled={actionLoading}
+                    onClick={() => act(() => updateStatus(slug, t.id, 'NO_SHOW'))}>
+                    ✗ No Show
+                  </button>
+                </OrderRow>
+              ))}
+            </div>
+
+            <div className="card" style={{ padding: 24 }}>
+              <div style={{ marginBottom: 16 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+                  ✅ Confirm Order Queue <span style={{ fontWeight: 400, color: '#888', fontSize: 15 }}>({confirmOrders.length})</span>
+                </h2>
+                <p style={{ fontSize: 12, color: '#888', margin: '2px 0 0' }}>
+                  Confirmed orders. Inside staff prepare these, then mark them done.
+                </p>
+              </div>
+
+              {confirmOrders.length === 0 ? (
+                <p style={{ color: '#999', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>No confirmed orders yet.</p>
+              ) : confirmOrders.map(t => (
+                <OrderRow key={t.id} token={t}>
+                  <span className={`badge ${STATUS_CLASS[t.status]}`}>{t.status}</span>
+                  {t.status === 'CONFIRMED' && (
+                    <button className="btn-secondary" disabled={actionLoading}
+                      style={{ padding: '8px 16px', fontSize: 12 }}
+                      onClick={() => act(() => updateStatus(slug, t.id, 'PREPARING'))}>
+                      👨‍🍳 Start Preparing
+                    </button>
+                  )}
+                  <button className="btn-primary" disabled={actionLoading}
+                    style={{ padding: '8px 16px', fontSize: 12, background: '#1a5c3a' }}
+                    onClick={() => act(() => updateStatus(slug, t.id, 'COMPLETED'))}>
+                    ✓ Done
+                  </button>
+                </OrderRow>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ─── Standard Queue mode (default): call → serve → done ─── */}
+        {!isOrderMode && (
+          <>
         {/* Dispatch Panel */}
         <div className="card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
@@ -470,6 +572,8 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+          </>
+        )}
 
         {/* Completed Today */}
         {done.length > 0 && (
