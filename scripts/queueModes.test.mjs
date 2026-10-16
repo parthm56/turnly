@@ -14,6 +14,7 @@ import {
   ORDER_CONFIRM,
   FINISHED,
   isFinished,
+  isOrderConfirmed,
 } from '../lib/queueModes.mjs';
 
 // Exactly two modes, in display order
@@ -53,6 +54,15 @@ assert.ok(!ORDER_CONFIRM.includes('COMPLETED'));
 assert.ok(isFinished('COMPLETED') && isFinished('NO_SHOW') && isFinished('CANCELLED'));
 for (const live of ['WAITING', 'CALLED', 'SERVING', 'CONFIRMED', 'PREPARING']) {
   assert.equal(isFinished(live), false, `${live} must not count as finished`);
+}
+
+// "I've Paid" gate: a freshly placed order must NOT pass through to the waiting
+// screen until staff have acted on it.
+for (const notYet of ['WAITING', undefined, null, '']) {
+  assert.equal(isOrderConfirmed(notYet), false, `${String(notYet)} must be blocked`);
+}
+for (const past of ['CONFIRMED', 'PREPARING', 'COMPLETED', 'NO_SHOW', 'CANCELLED']) {
+  assert.equal(isOrderConfirmed(past), true, `${past} should be allowed through`);
 }
 
 console.log('queueModes.test.mjs — all checks passed');

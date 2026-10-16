@@ -1,7 +1,9 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
+import { getTokenStatus } from '@/lib/queueStore';
+import { isOrderConfirmed } from '@/lib/queueModes.mjs';
 import AdBanner from '@/components/AdBanner';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +19,9 @@ export default function PaymentPage({ params }) {
   const ticketId = params?.ticketId;
   const router = useRouter();
   const { business, loading } = useBusinessData(slug);
+
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
 
   const token = business?.tokens?.find(t => t.id === ticketId);
   const isOrderMode = business?.queueMode === 'order';
@@ -49,6 +54,26 @@ export default function PaymentPage({ params }) {
 
   const details = token.details || [];
   const total = details.reduce((sum, d) => sum + (Number(d.total) || 0) + (Number(d.price) || 0), 0);
+
+  // "I've Paid" is not a free pass to the waiting screen — ask the database
+  // whether staff have actually confirmed this order first.
+  const handleTrackOrder = async () => {
+    if (checking) return;
+    setCheckError('');
+    setChecking(true);
+    try {
+      const status = await getTokenStatus(slug, ticketId);
+      if (isOrderConfirmed(status)) {
+        router.replace(`/b/${slug}/ticket/${ticketId}`);
+      } else {
+        setCheckError('Your order is not confirmed yet. Please pay at the counter — staff will confirm it, and this screen moves on by itself once they do.');
+      }
+    } catch (_) {
+      setCheckError('Could not check your order just now. Please try again in a moment.');
+    } finally {
+      setChecking(false);
+    }
+  };
 
   return (
     <div className="page-wrap" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -107,11 +132,19 @@ export default function PaymentPage({ params }) {
           </div>
         </div>
 
+        {checkError && (
+          <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ fontSize: 18, lineHeight: 1 }}>⏳</span>
+            <p style={{ fontSize: 12, color: '#92400e', margin: 0, lineHeight: 1.5, fontWeight: 600 }}>{checkError}</p>
+          </div>
+        )}
+
         <button
           className="btn-primary"
-          style={{ padding: '12px 20px', fontSize: 14, fontWeight: 700, background: '#16a34a' }}
-          onClick={() => router.replace(`/b/${slug}/ticket/${ticketId}`)}>
-          ✓ I&apos;ve Paid — Track My Order
+          disabled={checking}
+          style={{ padding: '12px 20px', fontSize: 14, fontWeight: 700, background: '#16a34a', cursor: checking ? 'wait' : 'pointer' }}
+          onClick={handleTrackOrder}>
+          {checking ? 'Checking with staff…' : "✓ I've Paid — Track My Order"}
         </button>
 
         <AdBanner />
