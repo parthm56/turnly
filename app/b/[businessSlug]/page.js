@@ -8,6 +8,9 @@ import AdBanner from '@/components/AdBanner';
 
 export const dynamic = 'force-dynamic';
 
+// Disabled: hides the "Number of Persons" picker and passes 1 for every ticket.
+const SHOW_PARTY_SIZE = false;
+
 export default function CustomerPortal({ params }) {
   const router = useRouter();
   const slug = params?.businessSlug;
@@ -110,8 +113,7 @@ export default function CustomerPortal({ params }) {
   const completeJoin = async (phoneToSave) => {
     setJoining(true);
     try {
-      const numPartySize = Math.max(1, parseInt(partySize, 10) || 1);
-      const result = await joinQueue(slug, name, phoneToSave, numPartySize, selections);
+      const result = await joinQueue(slug, name, phoneToSave, 1, selections);
       if (result?.error === 'QUEUE_CLOSED') { setError('Queue is currently stopped. Please wait.'); return; }
       if (result?.error) { setError(result.error); return; }
 
@@ -455,7 +457,7 @@ export default function CustomerPortal({ params }) {
                   </p>
                 </div>
 
-                <div>
+                {SHOW_PARTY_SIZE && <div>
                   <label>Number of Persons *</label>
                   <div style={{ display: 'flex', gap: 12, marginTop: 6, alignItems: 'center' }}>
                     <input
@@ -509,7 +511,7 @@ export default function CustomerPortal({ params }) {
                       </button>
                     ))}
                   </div>
-                </div>
+                </div>}
 
                 {/* Dynamic, staff-configured fields (menu / staff list / questions) */}
                 {business.fields?.length > 0 && business.fields.map(f => (
