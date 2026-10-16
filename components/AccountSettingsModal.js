@@ -7,6 +7,7 @@ import {
   updateStaffPassword,
   deleteBusinessAccount,
   getCategories,
+  DEFAULT_CATEGORIES,
 } from '@/lib/queueStore';
 import { evaluatePasswordStrength } from '@/lib/security';
 import FieldsEditor from '@/components/FieldsEditor';
@@ -18,7 +19,7 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
   // Profile state
   const [name, setName] = useState(business?.name || '');
   const [category, setCategory] = useState(business?.category || '');
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [profileMsg, setProfileMsg] = useState('');
   const [profileErr, setProfileErr] = useState('');
   const [profileLoading, setProfileLoading] = useState(false);
@@ -45,10 +46,10 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
 
   const passwordStrength = evaluatePasswordStrength(newPassword);
 
-  // Category options come from the database, not a hardcoded list
+  // Category options come from the database with built-in platform defaults
   useEffect(() => {
     if (!isOpen) return;
-    getCategories().then(setCategories).catch(() => setCategories([]));
+    getCategories().then(setCategories).catch(() => setCategories(DEFAULT_CATEGORIES));
   }, [isOpen]);
 
   if (!isOpen || !business) return null;

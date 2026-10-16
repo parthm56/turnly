@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { registerBusiness, getCategories } from '@/lib/queueStore';
+import { registerBusiness, getCategories, DEFAULT_CATEGORIES } from '@/lib/queueStore';
 import { isValidEmail, sanitizeSlug, evaluatePasswordStrength } from '@/lib/security';
 import Link from 'next/link';
 
@@ -12,15 +12,15 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [category, setCategory] = useState('');
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const strength = evaluatePasswordStrength(password);
 
-  // Category options come from the database, not a hardcoded list
+  // Category options come from the database with built-in platform defaults
   useEffect(() => {
-    getCategories().then(setCategories).catch(() => setCategories([]));
+    getCategories().then(setCategories).catch(() => setCategories(DEFAULT_CATEGORIES));
   }, []);
 
   const handleNameChange = (e) => {
