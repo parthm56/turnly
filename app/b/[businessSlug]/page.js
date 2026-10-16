@@ -64,7 +64,9 @@ export default function CustomerPortal({ params }) {
     if (id) {
       const tok = business.tokens?.find(t => t.id === id);
       if (tok && !['CANCELLED', 'COMPLETED', 'NO_SHOW'].includes(tok.status)) {
-        router.replace(`/b/${slug}/ticket/${id}`);
+        // Order Queue: an unconfirmed order still owes payment — route via the pay screen
+        const viaPay = business.queueMode === 'order' && tok.status === 'WAITING';
+        router.replace(`/b/${slug}/${viaPay ? 'pay' : 'ticket'}/${id}`);
       }
     }
   }, [loading, business, slug, router, checked]);
@@ -132,7 +134,7 @@ export default function CustomerPortal({ params }) {
         }
       }
 
-      router.push(`/b/${slug}/ticket/${result.id}`);
+      router.push(isOrderMode ? `/b/${slug}/pay/${result.id}` : `/b/${slug}/ticket/${result.id}`);
     } catch (err) {
       setError('Connection error. Please try again.');
     } finally {

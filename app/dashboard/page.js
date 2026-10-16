@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusinessData } from '@/hooks/useHydratedStore';
-import { setQueueState, callCustomer, updateStatus } from '@/lib/queueStore';
+import { setQueueState, callCustomer, notifyCustomer, updateStatus } from '@/lib/queueStore';
 import { normaliseQueueMode, modeName, STANDARD_ACTIVE, ORDER_NEW, ORDER_CONFIRM, FINISHED } from '@/lib/queueModes.mjs';
 import AccountSettingsModal from '@/components/AccountSettingsModal';
 import WhatsAppSettingsModal from '@/components/WhatsAppSettingsModal';
@@ -58,6 +58,11 @@ function OrderRow({ token, children }) {
         <span style={{ fontSize: 22, fontWeight: 900, marginRight: 12 }}>#{token.number}</span>
         <span style={{ fontSize: 15, fontWeight: 600 }}>{token.customerName}</span>
         {token.phone ? <span style={{ fontSize: 13, color: '#666', marginLeft: 8 }}>{token.phone}</span> : null}
+        {token.fcmToken ? (
+          <span style={{ marginLeft: 8, fontSize: 11, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: 100, fontWeight: 600 }}>
+            🔔 Phone Alert
+          </span>
+        ) : null}
         <TokenDetails details={token.details} />
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>{children}</div>
@@ -295,6 +300,11 @@ export default function DashboardPage() {
               ) : confirmOrders.map(t => (
                 <OrderRow key={t.id} token={t}>
                   <span className={`badge ${STATUS_CLASS[t.status]}`}>{t.status}</span>
+                  <button className="btn-secondary" disabled={actionLoading}
+                    style={{ padding: '8px 16px', fontSize: 12 }}
+                    onClick={() => act(() => notifyCustomer(slug, t.id))}>
+                    📢 Call Customer
+                  </button>
                   {t.status === 'CONFIRMED' && (
                     <button className="btn-secondary" disabled={actionLoading}
                       style={{ padding: '8px 16px', fontSize: 12 }}
