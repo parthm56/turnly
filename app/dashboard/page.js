@@ -15,6 +15,27 @@ const STATUS_CLASS = {
   CANCELLED: 'badge-cancelled',
 };
 
+const money = (n) => (n ? `₹${n}` : '');
+
+/** Renders the customer's dynamic selections (menu order, chosen staff, answers). */
+function TokenDetails({ details }) {
+  if (!details?.length) return null;
+  return (
+    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {details.map((d, i) => (
+        <div key={i} style={{ fontSize: 12, color: '#444' }}>
+          <span style={{ color: '#888' }}>{d.label}: </span>
+          <span style={{ fontWeight: 600 }}>
+            {d.items
+              ? `${d.items.map(it => `${it.name} ×${it.qty}`).join(', ')}${money(d.total) ? ` — ${money(d.total)}` : ''}`
+              : `${d.value}${money(d.price) ? ` — ${money(d.price)}` : ''}`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [slug, setSlug] = useState('');
@@ -212,6 +233,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: 13, color: '#666', marginLeft: 8 }}>
                   Party of {t.partySize}{t.phone ? ` · ${t.phone}` : ''}
                 </span>
+                <TokenDetails details={t.details} />
                 {t.fcmToken && (
                   <span style={{ marginLeft: 8, fontSize: 11, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '2px 8px', borderRadius: 100, fontWeight: 600 }}>
                     🔔 Phone Alert
@@ -384,6 +406,7 @@ export default function DashboardPage() {
                                     🔔 Phone Alert
                                   </span>
                                 )}
+                                <TokenDetails details={t.details} />
                               </td>
                               <td style={{ padding: '10px 12px', color: '#666' }}>{t.phone || '—'}</td>
                               <td style={{ padding: '10px 12px', fontWeight: 700 }}>{t.partySize} {t.partySize === 1 ? 'person' : 'persons'}</td>
@@ -430,6 +453,8 @@ export default function DashboardPage() {
                               </span>
                             )}
                           </div>
+
+                          <TokenDetails details={t.details} />
 
                           <button className="btn-primary" disabled={business.queueState !== 'OPEN' || actionLoading}
                             style={{ width: '100%', padding: '10px 16px', fontSize: 13, background: '#1a5c3a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}

@@ -9,10 +9,11 @@ import {
   getCategories,
 } from '@/lib/queueStore';
 import { evaluatePasswordStrength } from '@/lib/security';
+import FieldsEditor from '@/components/FieldsEditor';
 
 export default function AccountSettingsModal({ business, isOpen, onClose }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'security' | 'danger'
+  const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'form' | 'security' | 'danger'
 
   // Profile state
   const [name, setName] = useState(business?.name || '');
@@ -205,6 +206,21 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
             🏢 Profile
           </button>
           <button
+            onClick={() => setActiveTab('form')}
+            style={{
+              padding: '12px 18px',
+              fontSize: 13,
+              fontWeight: 700,
+              border: 'none',
+              borderBottom: activeTab === 'form' ? '2px solid #18181b' : '2px solid transparent',
+              background: 'transparent',
+              color: activeTab === 'form' ? '#18181b' : '#71717a',
+              cursor: 'pointer',
+            }}
+          >
+            📋 Customer Form
+          </button>
+          <button
             onClick={() => setActiveTab('security')}
             style={{
               padding: '12px 18px',
@@ -279,6 +295,9 @@ export default function AccountSettingsModal({ business, isOpen, onClose }) {
               </button>
             </form>
           )}
+
+          {/* TAB 1b: CUSTOMER FORM */}
+          {activeTab === 'form' && <FieldsEditor business={business} />}
 
           {/* TAB 2: SECURITY */}
           {activeTab === 'security' && (

@@ -298,6 +298,22 @@ export default function TicketPage({ params }) {
           ))}
         </div>
 
+        {/* Customer's selections (menu order / chosen staff / answers) */}
+        {token.details?.length > 0 && (
+          <div className="card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {token.details.map((d, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
+                <span style={{ color: '#888' }}>{d.label}</span>
+                <span style={{ fontWeight: 600, textAlign: 'right' }}>
+                  {d.items
+                    ? `${d.items.map(it => `${it.name} ×${it.qty}`).join(', ')}${d.total ? ` — ₹${d.total}` : ''}`
+                    : `${d.value}${d.price ? ` — ₹${d.price}` : ''}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* WhatsApp Notification Badge or Setup */}
         {token.phone && !isEditingPhone ? (
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

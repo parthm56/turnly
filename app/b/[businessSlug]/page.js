@@ -16,12 +16,32 @@ export default function CustomerPortal({ params }) {
   const [name, setName]           = useState('');
   const [phone, setPhone]         = useState('');
   const [partySize, setPartySize] = useState(1);
+  const [selections, setSelections] = useState({});
   const [error, setError]         = useState('');
   const [joining, setJoining]     = useState(false);
   const [checked, setChecked]     = useState(false);
 
+  // OTP Verification state
+  const [step, setStep]                       = useState('form'); // 'form' | 'otp'
+  const [otpCode, setOtpCode]                 = useState('');
+  const [otpHash, setOtpHash]                 = useState('');
+  const [otpExpiresAt, setOtpExpiresAt]       = useState(null);
+  const [maskedPhone, setMaskedPhone]         = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const [sendingOtp, setSendingOtp]           = useState(false);
+  const [verifyingOtp, setVerifyingOtp]       = useState(false);
+
   // Notification state: 'default' | 'granted' | 'denied' | 'unsupported'
   const [notifState, setNotifState] = useState('default');
+
+  // 30s countdown timer for resending OTP
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCountdown(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCountdown]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -87,30 +107,11 @@ export default function CustomerPortal({ params }) {
   const waiting = business.tokens?.filter(t => t.status === 'WAITING').length || 0;
   const isOpen = business.queueState === 'OPEN';
 
-  // OTP Verification state
-  const [step, setStep]                       = useState('form'); // 'form' | 'otp'
-  const [otpCode, setOtpCode]                 = useState('');
-  const [otpHash, setOtpHash]                 = useState('');
-  const [otpExpiresAt, setOtpExpiresAt]       = useState(null);
-  const [maskedPhone, setMaskedPhone]         = useState('');
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const [sendingOtp, setSendingOtp]           = useState(false);
-  const [verifyingOtp, setVerifyingOtp]       = useState(false);
-
-  // 30s countdown timer for resending OTP
-  useEffect(() => {
-    if (resendCountdown <= 0) return;
-    const interval = setInterval(() => {
-      setResendCountdown(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [resendCountdown]);
-
   const completeJoin = async (phoneToSave) => {
     setJoining(true);
     try {
       const numPartySize = Math.max(1, parseInt(partySize, 10) || 1);
-      const result = await joinQueue(slug, name, phoneToSave, numPartySize);
+      const result = await joinQueue(slug, name, phoneToSave, numPartySize, selections);
       if (result?.error === 'QUEUE_CLOSED') { setError('Queue is currently stopped. Please wait.'); return; }
       if (result?.error) { setError(result.error); return; }
 
@@ -220,6 +221,9 @@ export default function CustomerPortal({ params }) {
       await completeJoin(phone);
     }
   };
+
+  const setFieldValue = (fid, value) => setSelections(s => ({ ...s, [fid]: value }));
+  const setQty = (fid, oid, qty) => setSelections(s => ({ ...s, [fid]: { ...(s[fid] || {}), [oid]: Math.max(0, qty) } }));
 
   return (
     <div className="page-wrap" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -506,6 +510,53 @@ export default function CustomerPortal({ params }) {
                     ))}
                   </div>
                 </div>
+
+                {/* Dynamic, staff-configured fields (menu / staff list / questions) */}
+                {business.fields?.length > 0 && business.fields.map(f => (
+                  <div key={f.id}>
+                    <label>{f.label}{f.required ? ' *' : ''}</label>
+                    {f.type === 'text' ? (
+                      <input type="text" value={selections[f.id] || ''}
+                        onChange={e => setFieldValue(f.id, e.target.value)}
+                        required={f.required} disabled={sendingOtp || joining} />
+                    ) : f.mode === 'single' ? (
+                      <select value={selections[f.id] || ''}
+                        onChange={e => setFieldValue(f.id, e.target.value)}
+                        required={f.required} disabled={sendingOtp || joining}>
+                        <option value="">Select…</option>
+                        {f.options.map(o => (
+                          <option key={o.id} value={o.id}>{o.name}{o.price ? ` — ₹${o.price}` : ''}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {f.options.map(o => {
+                          const qty = selections[f.id]?.[o.id] || 0;
+                          return (
+                            <div key={o.id} style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                              border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '8px 12px',
+                              background: qty ? '#f0fdf4' : '#fff',
+                            }}>
+                              <span style={{ fontSize: 13 }}>
+                                {o.name}{o.price ? <span style={{ color: '#888' }}> · ₹{o.price}</span> : null}
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <button type="button" disabled={sendingOtp || joining || !qty}
+                                  onClick={() => setQty(f.id, o.id, qty - 1)}
+                                  style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(0,0,0,0.15)', background: '#fafaf9', cursor: qty ? 'pointer' : 'default', fontWeight: 700 }}>−</button>
+                                <span style={{ minWidth: 18, textAlign: 'center', fontWeight: 700, fontSize: 13 }}>{qty}</span>
+                                <button type="button" disabled={sendingOtp || joining}
+                                  onClick={() => setQty(f.id, o.id, qty + 1)}
+                                  style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(0,0,0,0.15)', background: '#fafaf9', cursor: 'pointer', fontWeight: 700 }}>+</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
 
                 <button
                   type="submit"
